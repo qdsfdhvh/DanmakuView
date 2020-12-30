@@ -3,11 +3,9 @@ package com.duzhaokun123.danmakuview.sample
 import android.graphics.Color
 import android.text.TextUtils
 import android.util.Log
-import com.duzhaokun123.danmakuview.Value
-import com.duzhaokun123.danmakuview.danmaku.SimpleDanmakuFactory
-import com.duzhaokun123.danmakuview.danmaku.BiliSpecialDanmaku
-import com.duzhaokun123.danmakuview.interfaces.DanmakuParser
-import com.duzhaokun123.danmakuview.model.Danmakus
+import com.seiko.danmu.Danmaku
+import com.seiko.danmu.DanmakuParser
+import com.seiko.danmu.danmaku.*
 import org.json.JSONArray
 import org.json.JSONException
 import java.io.InputStream
@@ -20,10 +18,8 @@ class XMLDanmakuParser(inputStream: InputStream) : DanmakuParser {
         const val TAG = "XMLDanmakuParser"
     }
 
-    private val simpleDanmakuFactory by lazy { SimpleDanmakuFactory() }
-
     private val danmakus by lazy {
-        val danmakus = Danmakus()
+        val danmakus = ArrayList<Danmaku>(1000)
 
         val xmlEventReader = XMLInputFactory.newInstance().createXMLEventReader(inputStream)
         var startD = false
@@ -47,9 +43,7 @@ class XMLDanmakuParser(inputStream: InputStream) : DanmakuParser {
                             //FIXME: 见鬼了, 解析出一堆 \n
                             if (text.startsWith("\n")) return@let
                             val offset = (tokens.nextToken().toFloat() * 1000).toLong() // offset
-                            val danmaku = simpleDanmakuFactory.create(
-                                tokens.nextToken().toInt().toType() // type
-                            )
+                            val danmaku = tokens.nextToken().toInt().createDanmaku()
                             danmaku.text = text
                             danmaku.offset = offset
                             danmaku.textSize = tokens.nextToken().toFloat() // textSize
@@ -58,7 +52,9 @@ class XMLDanmakuParser(inputStream: InputStream) : DanmakuParser {
                             danmaku.textColor = color
                             danmaku.textShadowColor =
                                 if (color <= Color.BLACK) Color.WHITE else Color.BLACK
-                            if (danmaku is BiliSpecialDanmaku) initialSpecialDanmakuData(danmaku)
+                            if (danmaku is BiliSpecialDanmaku) {
+                                initialSpecialDanmakuData(danmaku)
+                            }
 //                        initialSpecailDanmakuData(danmaku, mContext, mDispScaleX, mDispScaleY)
                             danmakus.add(danmaku)
                         }
@@ -175,16 +171,16 @@ class XMLDanmakuParser(inputStream: InputStream) : DanmakuParser {
         }
     }
 
-    private fun Int.toType(): SimpleDanmakuFactory.Type {
-        return when (this) {
-            1 -> SimpleDanmakuFactory.Type.R2L_DANMAKU
-            4 -> SimpleDanmakuFactory.Type.BOTTOM_DANMAKU
-            5 -> SimpleDanmakuFactory.Type.TOP_DANMAKU
-            6 -> SimpleDanmakuFactory.Type.L2R_DANMAKU
-            7 -> SimpleDanmakuFactory.Type.BILI_SPECIAL_DANMAKU
+    private fun Int.createDanmaku(): Danmaku {
+        return when(this) {
+            1 -> R2LDanmaku()
+            4 -> BottomDanmaku()
+            5 -> TopDanmaku()
+            6 -> L2RDanmaku()
+            7 -> BiliSpecialDanmaku()
             else -> {
                 Log.e(TAG, "unknowen type $this, R2L_DANMAKU as default")
-                SimpleDanmakuFactory.Type.R2L_DANMAKU
+                R2LDanmaku()
             }
         }
     }

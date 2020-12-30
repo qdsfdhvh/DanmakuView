@@ -1,15 +1,15 @@
 package com.duzhaokun123.danmakuview.sample
 
 import android.graphics.PointF
-import com.duzhaokun123.danmakuview.Value
-import com.duzhaokun123.danmakuview.danmaku.SpecialDanmaku
-import com.duzhaokun123.danmakuview.interfaces.DanmakuParser
-import com.duzhaokun123.danmakuview.model.Danmakus
+import com.seiko.danmu.Danmaku
+import com.seiko.danmu.DanmakuParser
+import com.seiko.danmu.Danmakus
+import com.seiko.danmu.danmaku.SpecialDanmaku
 import kotlin.random.Random
 
 object SpecialDanmakuTestParser : DanmakuParser {
     override fun parse(): Danmakus {
-        val danmakus = Danmakus()
+        val danmakus = ArrayList<Danmaku>(6)
         danmakus.add(SpecialDanmaku().apply {
             keyframes[0F] = Triple(PointF(0.5F, 0.5F), 0F, Value.ALPHA_MAX)
             keyframes[1F] = Triple(PointF(0.5F, 0.5F), 0F, Value.ALPHA_MAX)

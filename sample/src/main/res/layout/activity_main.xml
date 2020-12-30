@@ -296,7 +296,7 @@
         </LinearLayout>
     </com.google.android.flexbox.FlexboxLayout>
 
-    <com.duzhaokun123.danmakuview.ui.DanmakuView
+    <com.seiko.danmu.DanmakuView
         android:id="@+id/dv"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
