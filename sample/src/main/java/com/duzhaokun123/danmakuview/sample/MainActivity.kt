@@ -121,10 +121,9 @@ class MainActivity : AppCompatActivity() {
 
         supportActionBar?.hide()
 
-//        baseBinding.dv.drawDebugInfo = true
-//        baseBinding.dv.zOnTop = true
         baseBinding.dv.setZOrderOnTop(true)
         baseBinding.dv.danmakuConfig = config
+        baseBinding.dv.isDebug = true
         parserXMLDanmaku(resources.openRawResource(R.raw.danmaku))
     }
 
