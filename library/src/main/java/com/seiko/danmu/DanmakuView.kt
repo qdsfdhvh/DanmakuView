@@ -60,7 +60,7 @@ class DanmakuView @JvmOverloads constructor(
     /**
      * 弹幕集合
      */
-    private val danmakus: MutableCollection<Danmaku> = mutableSetOf()
+    private val danmakus: MutableCollection<Danmaku> = ArrayList(1000)
 
     /**
      * 正在显示的弹幕相关信息集合
@@ -246,85 +246,110 @@ class DanmakuView @JvmOverloads constructor(
         val maxLine = (drawHeight - config.marginTop - config.marginBottom) / config.lineHeight
         if (maxLine < 1) return
 
-        val oldDanmakus = showingDanmakus
         val conductedTime = conductedTimeMs
 
-        val willShowDanmakus = mutableSetOf<ShowingDanmakuInfo>()
+        // 已经显示的弹幕
+        val oldShowingDanmakus = showingDanmakus
+        val newShowingDanmakus = mutableSetOf<ShowingDanmakuInfo>()
+
+        // 准备绘制的弹幕，也是新增加的弹幕
+        val willDrawDanmakus = mutableSetOf<Pair<Danmaku, Float>>()
+
+        fun drawAndAdd(
+            danmaku: Danmaku,
+            line: Int, progress: Float,
+            info: ShowingDanmakuInfo? = null
+        ) {
+            // 绘制弹幕
+            val rect = drawDanmaku(
+                canvas = canvas,
+                config = config,
+                danmaku = danmaku,
+                maxLine = maxLine,
+                progress = progress,
+                line = line,
+            )
+            // 绘制成功后，记录信息
+            if (rect != null) {
+                if (info != null) {
+                    info.rect = rect
+                    info.progress = progress
+                    newShowingDanmakus.add(info)
+                } else {
+                    newShowingDanmakus.add(
+                        ShowingDanmakuInfo(danmaku, line, rect, progress)
+                    )
+                }
+            }
+        }
+
+        // Will java.util.ConcurrentModificationException
         ArrayList(danmakus).asSequence()
             // 弹幕显示
             .filter { it.visibility }
             // 弹幕没有被拦截
             .filter { !config.blockers.shouldBlock(it) }
-            // 在时间段内
-            .filter { danmaku ->
-                val duration = danmaku.duration * config.durationCoefficient
-                val start = danmaku.offset
-                val end = (danmaku.offset + duration).toLong()
-                conductedTime in start..end
-            }
             .forEach { danmaku ->
                 val duration = danmaku.duration * config.durationCoefficient
                 val start = danmaku.offset
+                val end = (danmaku.offset + duration).toLong()
                 val progress = (conductedTime - start) / duration
 
-                val info = oldDanmakus.find { it.danmaku == danmaku }
+                // 过滤不在时间段内
+                if (conductedTime !in start..end) return@forEach
+
+                // 直接绘制旧弹幕
+                val info = oldShowingDanmakus.find { it.danmaku == danmaku }
                 if (info != null) {
-                    drawDanmaku(
-                        canvas = canvas,
-                        config = config,
-                        danmaku = danmaku,
-                        maxLine = maxLine,
-                        progress = progress,
-                        line = info.line,
-                        willShowDanmakus = willShowDanmakus
-                    )
+                    drawAndAdd(danmaku, info.line, progress, info)
                     return@forEach
                 }
 
-                if (danmaku is LineDanmaku) {
-                    var line = 1
-                    var moved: Boolean
-                    do {
-                        moved = false
-                        for (item in willShowDanmakus) {
-                            if (line == item.line && danmaku.javaClass == item.danmaku.javaClass) {
-                                if (danmaku.willHit(
-                                        config,
-                                        item.danmaku as LineDanmaku,
-                                        drawWidth,
-                                        drawHeight
-                                    )
-                                ) {
-                                    line++
-                                    moved = true
-                                    break
-                                }
-                            }
-                        }
-                    } while (moved)
-                    drawDanmaku(
-                        canvas = canvas,
-                        config = config,
-                        danmaku = danmaku,
-                        maxLine = maxLine,
-                        progress = progress,
-                        line = line,
-                        willShowDanmakus = willShowDanmakus
-                    )
-                    return@forEach
-                }
-
-                drawDanmaku(
-                    canvas = canvas,
-                    config = config,
-                    maxLine = 0,
-                    danmaku = danmaku,
-                    progress = progress,
-                    line = 0,
-                    willShowDanmakus = willShowDanmakus
-                )
+                // 放入待绘制列表
+                willDrawDanmakus.add(danmaku to progress)
             }
-        showingDanmakus = willShowDanmakus
+
+        // 将已经显示的弹幕先按行数
+        val lineDanmakuInfoList = newShowingDanmakus.filter { it.danmaku is LineDanmaku }
+            .sortedBy { it.line }
+
+        // 开始绘制新弹幕
+        willDrawDanmakus.forEach { (danmaku, progress) ->
+            if (danmaku is LineDanmaku) {
+                // 这里计算行数不严谨，后续待调整
+                var line = 1
+                for (info in lineDanmakuInfoList) {
+                    if (info.line > line) {
+                        break
+                    }
+                    if (info.line == line) {
+                        if (isLineDanmakuHit(config, danmaku, info.danmaku as LineDanmaku)) {
+                            line++
+                        }
+                    }
+                }
+                drawAndAdd(danmaku, line, progress)
+            } else {
+                drawAndAdd(danmaku, 0, progress)
+            }
+        }
+
+        showingDanmakus = newShowingDanmakus
+    }
+
+    /**
+     * 弹幕是否会碰撞(重叠)
+     */
+    private fun isLineDanmakuHit(
+        config: DanmakuConfig,
+        danmaku1: LineDanmaku,
+        danmaku2: LineDanmaku
+    ): Boolean {
+        // 只比较同类
+        if (danmaku1.javaClass != danmaku2.javaClass) {
+            return false
+        }
+        return danmaku1.willHit(config, danmaku2, drawWidth, drawHeight)
     }
 
     /**
@@ -337,40 +362,18 @@ class DanmakuView @JvmOverloads constructor(
         maxLine: Int,
         progress: Float,
         line: Int,
-        willShowDanmakus: MutableCollection<ShowingDanmakuInfo>
-    ) {
-        if (line == 0) {
-            danmaku.onDraw(
-                canvas, config,
-                drawWidth, drawHeight,
-                progress, 0
-            )?.let {
-                willShowDanmakus.add(
-                    ShowingDanmakuInfo(
-                        danmaku, it, 0, progress
-                    )
-                )
-            }
-            return
-        }
-
-        // TODO 不了解
-        if (line < maxLine || config.isAllowCovering) {
-            var drawLine = line % maxLine
-            if (drawLine == 0) drawLine = maxLine
-
-            danmaku.onDraw(
-                canvas, config,
-                drawWidth, drawHeight,
-                progress, drawLine
-            )?.let {
-                willShowDanmakus.add(
-                    ShowingDanmakuInfo(
-                        danmaku, it, line, progress
-                    )
-                )
-            }
-        }
+    ): RectF? {
+        // 最大行数大于1时，绘制行不能比最大行大
+        if (maxLine in 1 until line) return null
+        // 绘制成功后，返回位置
+        return danmaku.onDraw(
+            canvas = canvas,
+            config = config,
+            drawWidth = drawWidth,
+            drawHeight = drawHeight,
+            progress = progress,
+            line = line
+        )
     }
 
     /**
@@ -404,8 +407,8 @@ class DanmakuView @JvmOverloads constructor(
      */
     data class ShowingDanmakuInfo(
         val danmaku: Danmaku,
-        val rect: RectF,
         val line: Int,
-        val progress: Float
+        var rect: RectF,
+        var progress: Float
     )
 }
