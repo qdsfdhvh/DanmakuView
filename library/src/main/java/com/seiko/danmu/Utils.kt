@@ -23,10 +23,5 @@ fun Canvas.clear() {
  * @param danmaku 弹幕
  */
 fun Collection<DanmakuBlocker>.showBlock(danmaku: Danmaku): Boolean {
-    forEach { blocker ->
-        if (blocker.block(danmaku)) {
-            return true
-        }
-    }
-    return false
+    return find { it.block(danmaku) } != null
 }
