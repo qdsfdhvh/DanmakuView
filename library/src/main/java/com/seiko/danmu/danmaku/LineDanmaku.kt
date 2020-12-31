@@ -29,7 +29,7 @@ abstract class LineDanmaku : Danmaku() {
         }
         paint.textSize = textSize * config.textSizeCoefficient
         paint.typeface = config.typeface
-        when(config.drawMode) {
+        when (config.drawMode) {
             DanmakuConfig.DEFAULT -> {
                 paint.clearShadowLayer()
             }
@@ -47,18 +47,22 @@ abstract class LineDanmaku : Danmaku() {
 
     /**
      * 绘制的编剧
+     * @param canReadCached 是否可以读取缓存
      */
-    fun getSize(config: DanmakuConfig): Pair<Int, Int> {
-        var size = _size
-        if (size == null) {
-            val bounds = Rect()
-            getPaint(config).getTextBounds(text, 0, text.length, bounds)
-            val width = (bounds.width() + textSize / 3).toInt()
-            val height = (bounds.height() + textSize / 3).toInt()
-            size = width to height
-            _size = size
+    fun getSize(config: DanmakuConfig, canReadCached: Boolean = false) =
+        getSize(getPaint(config), canReadCached)
+
+    fun getSize(paint: Paint, canReadCached: Boolean = false): Pair<Int, Int> {
+        if (canReadCached && _size != null) {
+            return _size!!
         }
-        return size
+
+        val bounds = Rect()
+        paint.getTextBounds(text, 0, text.length, bounds)
+        val width = (bounds.width() + textSize / 3).toInt()
+        val height = (bounds.height() + textSize / 3).toInt()
+        _size = width to height
+        return _size!!
     }
 
     /**

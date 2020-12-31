@@ -15,10 +15,11 @@ class TopDanmaku : LineDanmaku() {
         progress: Float,
         line: Int
     ): RectF {
-        val (width, height) = getSize(config)
+        val paint = getPaint(config)
+        val (width, height) = getSize(paint)
         val x = (drawWidth - width) / 2f
         val y = (config.lineHeight * (line - 1)).toFloat() + config.marginTop
-        canvas.drawText(text, x, y + height, getPaint(config))
+        canvas.drawText(text, x, y + height, paint)
 
         val rectF = RectF(x, y, x + width, y + height)
         // 绘制边框

@@ -23,8 +23,7 @@ internal fun LineDanmaku.checkScrollLineDanmakuHit(
         return true
     }
 
-    val otherSize = other.getSize(config)
-
+    val otherSize = other.getSize(config, true)
 
     val otherSpeed = (drawWidth + otherSize.first).toDouble() /
             (other.duration * config.durationCoefficient)
@@ -33,7 +32,7 @@ internal fun LineDanmaku.checkScrollLineDanmakuHit(
         return true
     }
 
-    val thisSize = this.getSize(config)
+    val thisSize = this.getSize(config, true)
 
     val thisSpeed = (drawWidth + thisSize.first).toDouble() /
             (this.duration * config.durationCoefficient)
