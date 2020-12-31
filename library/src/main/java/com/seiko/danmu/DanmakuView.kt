@@ -226,21 +226,16 @@ class DanmakuView @JvmOverloads constructor(
     }
 
     private fun onDrawDanmakus(config: DanmakuConfig) {
-        val canvas: Canvas = try {
-            holder.lockHardwareCanvas()
-        } catch (e: IllegalStateException) {
-            e.printStackTrace()
-            holder.lockCanvas()
-        } ?: return
-        // 清空画布
-        canvas.clear()
-        // 绘制弹幕
-        drawDanmakus(canvas, config)
-        // 绘制调试文字
-        if (isDebug) {
-            drawDebugText(canvas)
+        withCanvas {
+            // 清空画布
+            clear()
+            // 绘制弹幕
+            drawDanmakus(this, config)
+            // 绘制调试文字
+            if (isDebug) {
+                drawDebugText(this)
+            }
         }
-        holder.unlockCanvasAndPost(canvas)
     }
 
     /**
@@ -259,7 +254,7 @@ class DanmakuView @JvmOverloads constructor(
             // 弹幕显示
             .filter { it.visibility }
             // 弹幕没有被拦截
-            .filter { !config.blockers.showBlock(it) }
+            .filter { !config.blockers.shouldBlock(it) }
             // 在时间段内
             .filter { danmaku ->
                 val duration = danmaku.duration * config.durationCoefficient
@@ -390,8 +385,8 @@ class DanmakuView @JvmOverloads constructor(
             debugPaint
         )
         canvas.drawText(
-            "showingCount = ${showingDanmakus.size}," +
-                    " count = ${danmakus.size}",
+            "showingCount = ${showingDanmakus.size}, " +
+                    "count = ${danmakus.size}",
             20F, drawHeight - 50F,
             debugPaint
         )
