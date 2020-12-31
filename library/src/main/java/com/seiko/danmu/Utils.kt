@@ -30,27 +30,3 @@ fun Collection<DanmakuBlocker>.showBlock(danmaku: Danmaku): Boolean {
     }
     return false
 }
-
-/**
- * 为弹幕创建画笔
- */
-fun Danmaku.createPaint(config: DanmakuConfig): Paint {
-    val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-    paint.color = textColor
-    paint.alpha = alpha
-    paint.textSize = textSize * config.textSizeCoefficient
-    paint.typeface = config.typeface
-    paint.isUnderlineText = underLine
-    when(config.drawMode) {
-        DanmakuConfig.DEFAULT -> {}
-        DanmakuConfig.SHADOW -> {
-            paint.setShadowLayer(
-                config.shadowRadius,
-                config.shadowDx,
-                config.shadowDy,
-                config.shadowColor
-            )
-        }
-    }
-    return paint
-}

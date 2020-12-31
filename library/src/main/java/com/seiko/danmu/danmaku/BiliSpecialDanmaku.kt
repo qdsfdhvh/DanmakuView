@@ -1,12 +1,13 @@
 package com.seiko.danmu.danmaku
 
 import android.graphics.*
+import androidx.core.graphics.withSave
+import com.seiko.danmu.Danmaku
 import com.seiko.danmu.DanmakuConfig
-import com.seiko.danmu.createPaint
 import kotlin.math.abs
 import kotlin.math.sqrt
 
-class BiliSpecialDanmaku : CacheDanmaku() {
+class BiliSpecialDanmaku : Danmaku() {
     companion object {
         const val BILI_PLAYER_WIDTH = 682.0F
         const val BILI_PLAYER_HEIGHT = 438.0F
@@ -40,64 +41,106 @@ class BiliSpecialDanmaku : CacheDanmaku() {
 
     var isQuadraticEaseOut = false
 
-    override fun onBuildCache(config: DanmakuConfig) {
-        val text = (if (lines != null) lines else arrayOf(text))!!
-        var paint = createPaint(config)
-        val bounderses = mutableListOf<Rect>()
-        var width = 0
-        var height = 0
-        text.forEach { s ->
-            val bounders = Rect()
-            paint.getTextBounds(s, 0, s.length, bounders)
-            bounderses.add(bounders)
-            if (width < bounders.width()) width = bounders.width()
-            height += bounders.height()
-        }
-        width += (textSize / 3).toInt()
-        height += (textSize / 3).toInt()
-        if (width == 0 || height == 0) return
-        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888, true)
-        val canvas = Canvas(bitmap)
-        var nextY = 0F
-        text.forEachIndexed { i, s ->
-            nextY += bounderses[i].height().toFloat()
-            canvas.drawText(s, 0F, nextY, paint)
-        }
-        if (borderColor != 0) {
-            paint = Paint()
-            paint.color = borderColor
-            paint.style = Paint.Style.STROKE
-            paint.strokeWidth = 5F
-            canvas.drawRect(0F, 0F, width.toFloat(), height.toFloat(), paint)
-        }
-        cache = bitmap
-    }
+    private var _paint: Paint? = null
 
-    val bitmapPaint by lazy { Paint() }
+    private fun getPaint(config: DanmakuConfig): Paint {
+        var paint = _paint
+        if (paint == null) {
+            paint = Paint(Paint.ANTI_ALIAS_FLAG)
+            paint.color = textColor
+            paint.alpha = alpha
+            paint.isUnderlineText = underLine
+            _paint = paint
+        }
+        paint.textSize = textSize * config.textSizeCoefficient
+        paint.typeface = config.typeface
+
+        when (config.drawMode) {
+            DanmakuConfig.DEFAULT -> {
+                paint.clearShadowLayer()
+            }
+            DanmakuConfig.SHADOW -> {
+                paint.setShadowLayer(
+                    config.shadowRadius,
+                    config.shadowDx,
+                    config.shadowDy,
+                    config.shadowColor
+                )
+            }
+        }
+        return paint
+    }
 
     override fun onDraw(
         canvas: Canvas,
-        drawWidth: Int, drawHeight: Int, progress: Float,
-        config: DanmakuConfig, line: Int
-    ): RectF? {
-        // TODO: 20-11-21 Z 旋转, 路径, 延迟变换
-        val bitmap = tryBuildCache(config) ?: return null
+        config: DanmakuConfig,
+        drawWidth: Int,
+        drawHeight: Int,
+        progress: Float,
+        line: Int
+    ): RectF {
+        val paint = getPaint(config)
+        paint.alpha = beginAlpha + (deltaAlpha * progress).toInt()
 
-        bitmapPaint.alpha = beginAlpha + (deltaAlpha * progress).toInt()
+        // TODO: 20-11-21 Z 旋转, 路径, 延迟变换
+        val text = (if (lines != null) lines else arrayOf(text))!!
+
+        val boundsList = mutableListOf<Rect>()
+        var width = 0
+        var height = 0
+        text.forEach { s ->
+            val bounds = Rect()
+            paint.getTextBounds(s, 0, s.length, bounds)
+            boundsList.add(bounds)
+            if (width < bounds.width()) width = bounds.width()
+            height += bounds.height()
+        }
+        width += (textSize / 3).toInt()
+        height += (textSize / 3).toInt()
+
+        if (borderColor != 0) {
+            val borderPaint = Paint()
+            borderPaint.color = borderColor
+            borderPaint.style = Paint.Style.STROKE
+            borderPaint.strokeWidth = 5F
+            canvas.drawRect(0F, 0F, width.toFloat(), height.toFloat(), borderPaint)
+        }
+
         val x = beginX + deltaX * progress
         val y = beginY + deltaY * progress
         val (drawX, drawY) = getDrawXY(x, y, drawWidth, drawHeight)
         return if (rotationY == 0F) {
-            canvas.drawBitmap(bitmap, drawX, drawY, bitmapPaint)
-            RectF(drawX, drawY, drawX + bitmap.width, drawY + bitmap.height)
+            drawTexts(canvas, text, boundsList, drawX, drawY, paint)
+            RectF(drawX, drawY, drawX + width, drawY + height)
         } else {
             val matrix = Matrix()
             matrix.postRotate(rotationY)
             matrix.postTranslate(drawX, drawY)
-            canvas.drawBitmap(bitmap, matrix, bitmapPaint)
+
+            canvas.withSave {
+                rotate(rotationY)
+                translate(drawX, drawY)
+                drawTexts(canvas, text, boundsList, drawX, drawY, paint)
+            }
+
             val rect = RectF()
             matrix.mapRect(rect)
             rect
+        }
+    }
+
+    private fun drawTexts(
+        canvas: Canvas,
+        textArray: Array<String>,
+        boundsList: List<Rect>,
+        drawX: Float,
+        drawY: Float,
+        paint: Paint
+    ) {
+        var nextY = 0F
+        textArray.forEachIndexed { i, s ->
+            nextY += boundsList[i].height().toFloat()
+            canvas.drawText(s, drawX, drawY + nextY, paint)
         }
     }
 
@@ -153,6 +196,7 @@ class BiliSpecialDanmaku : CacheDanmaku() {
     }
 
     class LinePath {
+
         var pBegin: PointF? = null
         var pEnd: PointF? = null
         var duration = 0L
@@ -160,10 +204,8 @@ class BiliSpecialDanmaku : CacheDanmaku() {
         var endTime = 0L
         var deltaX = 0F
         var deltaY = 0F
-        fun setPoints(
-            pBegin: PointF,
-            pEnd: PointF
-        ) {
+
+        fun setPoints(pBegin: PointF, pEnd: PointF) {
             this.pBegin = pBegin
             this.pEnd = pEnd
             deltaX = (pEnd.x - pBegin.x)
@@ -182,8 +224,7 @@ class BiliSpecialDanmaku : CacheDanmaku() {
     }
 }
 
-
-fun PointF.getDistance(p: PointF): Float {
+private fun PointF.getDistance(p: PointF): Float {
     val x = abs(this.x - p.x)
     val y = abs(this.y - p.y)
     return sqrt(x * x + y * y)

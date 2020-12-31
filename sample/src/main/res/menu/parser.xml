@@ -7,9 +7,6 @@
         android:id="@+id/file"
         android:title="file" />
     <item
-        android:id="@+id/special"
-        android:title="special" />
-    <item
         android:id="@+id/empty"
         android:title="empty" />
 </menu>

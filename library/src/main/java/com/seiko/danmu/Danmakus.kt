@@ -1,3 +1,3 @@
 package com.seiko.danmu
 
-typealias Danmakus = MutableList<Danmaku>
+typealias Danmakus = Collection<Danmaku>

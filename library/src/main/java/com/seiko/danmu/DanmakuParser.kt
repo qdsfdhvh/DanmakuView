@@ -10,7 +10,7 @@ interface DanmakuParser {
         val EMPTY: DanmakuParser = EmptyDanmakuParser()
 
         private class EmptyDanmakuParser : DanmakuParser {
-            override fun parse(): Danmakus = ArrayList(0)
+            override fun parse(): Danmakus = emptyList()
         }
     }
 }

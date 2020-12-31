@@ -1,35 +1,71 @@
 package com.seiko.danmu.danmaku
 
-import android.graphics.*
+import android.graphics.Paint
+import android.graphics.Rect
+import com.seiko.danmu.Danmaku
 import com.seiko.danmu.DanmakuConfig
-import com.seiko.danmu.createPaint
 
-abstract class LineDanmaku : CacheDanmaku() {
+abstract class LineDanmaku : Danmaku() {
 
-    override fun onBuildCache(config: DanmakuConfig) {
-        var paint = createPaint(config)
+    private var _paint: Paint? = null
+    private var _size: Pair<Int, Int>? = null
 
-        val bounds = Rect()
-        paint.getTextBounds(text, 0, text.length, bounds)
-
-        val width = (bounds.width() + textSize / 3).toInt()
-        val height = (bounds.height() + textSize / 3).toInt()
-        if (width == 0 || height == 0) return
-
-        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888, true)
-        val canvas = Canvas(bitmap)
-        canvas.drawText(text, 0f, bounds.height().toFloat(), paint)
-
-        // 绘制边框
-        if (borderColor != Color.TRANSPARENT) {
-            paint = Paint()
-            paint.color = borderColor
-            paint.style = Paint.Style.STROKE
-            paint.strokeWidth = 5f
-            canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
+    protected val borderPaint by lazy(LazyThreadSafetyMode.NONE) {
+        Paint().apply {
+            color = borderColor
+            style = Paint.Style.STROKE
+            strokeWidth = 5f
         }
-        cache = bitmap
     }
+
+    fun getPaint(config: DanmakuConfig): Paint {
+        var paint = _paint
+        if (paint == null) {
+            paint = Paint(Paint.ANTI_ALIAS_FLAG)
+            paint.color = textColor
+            paint.alpha = alpha
+            paint.isUnderlineText = underLine
+            _paint = paint
+        }
+        paint.textSize = textSize * config.textSizeCoefficient
+        paint.typeface = config.typeface
+        when(config.drawMode) {
+            DanmakuConfig.DEFAULT -> {
+                paint.clearShadowLayer()
+            }
+            DanmakuConfig.SHADOW -> {
+                paint.setShadowLayer(
+                    config.shadowRadius,
+                    config.shadowDx,
+                    config.shadowDy,
+                    config.shadowColor
+                )
+            }
+        }
+        return paint
+    }
+
+    /**
+     * 绘制的编剧
+     */
+    fun getSize(config: DanmakuConfig): Pair<Int, Int> {
+        var size = _size
+        if (size == null) {
+            val bounds = Rect()
+            getPaint(config).getTextBounds(text, 0, text.length, bounds)
+            val width = (bounds.width() + textSize / 3).toInt()
+            val height = (bounds.height() + textSize / 3).toInt()
+            size = width to height
+            _size = size
+        }
+        return size
+    }
+
+    /**
+     * 字体的绘制高度
+     */
+    protected val Int.textHeight: Float
+        get() = this - textSize / 3
 
     /**
      * 同行同类弹幕是否碰撞

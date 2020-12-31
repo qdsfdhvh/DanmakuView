@@ -45,9 +45,7 @@ class MainActivity : AppCompatActivity() {
         }
         baseBinding.btnPause.setOnClickListener { baseBinding.dv.pause() }
         baseBinding.btnResume.setOnClickListener { baseBinding.dv.resume() }
-        baseBinding.btnStart.setOnClickListener { baseBinding.dv.start() }
-        baseBinding.btnBuildCache.setOnClickListener { baseBinding.dv.buildCache(config) }
-        baseBinding.btnCleanCache.setOnClickListener { baseBinding.dv.clearCache() }
+        baseBinding.btnStart.setOnClickListener { baseBinding.dv.start(config) }
         baseBinding.btnDrawOnce.setOnClickListener { baseBinding.dv.drawOnce() }
         baseBinding.sbSpeed.setOnSeekBarChangeListener(SimpleValueOnSeekBarChangeListener { value ->
             baseBinding.dv.speed = (value - 200) / 100F
@@ -104,11 +102,6 @@ class MainActivity : AppCompatActivity() {
                             addCategory(Intent.CATEGORY_OPENABLE)
                             type = "text/xml"
                         }, REQUEST_OPEN_XML_DANMAKU)
-                    R.id.special -> {
-                        lifecycleScope.launch {
-                            baseBinding.dv.parse(SpecialDanmakuTestParser)
-                        }
-                    }
                     R.id.empty -> {
                         lifecycleScope.launch {
                             baseBinding.dv.parse(DanmakuParser.EMPTY)
@@ -122,7 +115,6 @@ class MainActivity : AppCompatActivity() {
         supportActionBar?.hide()
 
         baseBinding.dv.setZOrderOnTop(true)
-        baseBinding.dv.danmakuConfig = config
         baseBinding.dv.isDebug = true
         parserXMLDanmaku(resources.openRawResource(R.raw.danmaku))
     }

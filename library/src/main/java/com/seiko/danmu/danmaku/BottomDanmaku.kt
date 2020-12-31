@@ -1,6 +1,7 @@
 package com.seiko.danmu.danmaku
 
 import android.graphics.Canvas
+import android.graphics.Color
 import android.graphics.RectF
 import com.seiko.danmu.DanmakuConfig
 
@@ -8,17 +9,23 @@ class BottomDanmaku : LineDanmaku() {
 
     override fun onDraw(
         canvas: Canvas,
+        config: DanmakuConfig,
         drawWidth: Int,
         drawHeight: Int,
         progress: Float,
-        config: DanmakuConfig,
         line: Int
-    ): RectF? {
-        val bitmap = tryBuildCache(config) ?: return null
-        val x = (drawWidth - bitmap.width) / 2f
+    ): RectF {
+        val (width, height) = getSize(config)
+        val x = (drawWidth - width) / 2f
         val y = (drawHeight - config.lineHeight * line - config.marginBottom).toFloat()
-        canvas.drawBitmap(bitmap, x, y, null)
-        return RectF(x, y, x + bitmap.width, y + bitmap.height)
+        canvas.drawText(text, x, y + height, getPaint(config))
+
+        val rectF = RectF(x, y, x + width, y + height)
+        // 绘制边框
+        if (borderColor != Color.TRANSPARENT) {
+            canvas.drawRect(rectF, borderPaint)
+        }
+        return rectF
     }
 
     override fun willHit(

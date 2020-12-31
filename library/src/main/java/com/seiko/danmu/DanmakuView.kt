@@ -3,10 +3,8 @@ package com.seiko.danmu
 import android.content.Context
 import android.graphics.*
 import android.util.AttributeSet
-import android.util.Log
 import android.view.SurfaceHolder
 import android.view.SurfaceView
-import com.seiko.danmu.danmaku.CacheDanmaku
 import com.seiko.danmu.danmaku.LineDanmaku
 import kotlinx.coroutines.*
 
@@ -19,7 +17,7 @@ class DanmakuView @JvmOverloads constructor(
     CoroutineScope by MainScope() {
 
     companion object {
-        private const val TAG = "DanmakuView"
+        private const val SPLIT_TIME = 1000L / 60
     }
 
     init {
@@ -35,9 +33,9 @@ class DanmakuView @JvmOverloads constructor(
     private var drawHeight: Int = 0
 
     /**
-     * 是否正在绘制
+     * Surface是否创建
      */
-    private var isRunning: Boolean = false
+    private var isSurfaceCreated: Boolean = false
 
     private var isPaused: Boolean = true
     private var isOnceResume: Boolean = false
@@ -55,20 +53,19 @@ class DanmakuView @JvmOverloads constructor(
         private set
 
     /**
-     * 进行时间纳秒 (不准确)
+     * 进行时间毫秒
      */
     val conductedTimeMs: Long get() = conductedTimeNs / 1_000_000
 
     /**
      * 弹幕集合
      */
-    var danmakus: Danmakus = ArrayList(1000)
+    private val danmakus: MutableCollection<Danmaku> = mutableSetOf()
 
     /**
      * 正在显示的弹幕相关信息集合
      */
-    var showingDanmakus: Collection<ShowingDanmakuInfo> = emptySet()
-        private set
+    private var showingDanmakus: Collection<ShowingDanmakuInfo> = emptySet()
 
     /**
      * 播放速度
@@ -80,50 +77,10 @@ class DanmakuView @JvmOverloads constructor(
      */
     var isDebug: Boolean = false
 
-    var danmakuConfig: DanmakuConfig? = null
-        set(value) {
-            field = value
-            if (isRunning && value != null) {
-                startDrawDanmu(value)
-            }
-        }
-
-    /**
-     * 构建缓存
-     * @param refresh 刷新已有缓存
-     */
-    fun buildCache(config: DanmakuConfig, refresh: Boolean = false) {
-        launch(Dispatchers.Default) {
-            val startTime = System.currentTimeMillis()
-            val count = danmakus.asSequence()
-                .filterIsInstance(CacheDanmaku::class.java)
-                .filter { it.cache == null || refresh }
-                .sumBy { danmaku ->
-                    danmaku.onBuildCache(config)
-                    if (danmaku.cache != null) 1 else 0
-                }
-            val deltaTime = System.currentTimeMillis() - startTime
-            Log.d(TAG, "buildCache: $count of ${danmakus.size} danmakus in $deltaTime ms")
-        }
-    }
-
-    /**
-     * 清空缓存
-     */
-    fun clearCache() {
-        launch(Dispatchers.Default + NonCancellable) {
-            danmakus.asSequence()
-                .filterIsInstance(CacheDanmaku::class.java)
-                .forEach {
-                    it.cache?.recycle()
-                    it.cache = null
-                }
-        }
-    }
-
     suspend fun parse(parser: DanmakuParser) {
         withContext(Dispatchers.Default) {
-            danmakus = parser.parse()
+            danmakus.clear()
+            danmakus.addAll(parser.parse())
             isPaused = true
             conductedTimeNs = 0
             isOnceResume = true
@@ -138,7 +95,7 @@ class DanmakuView @JvmOverloads constructor(
         danmakus.add(danmaku)
     }
 
-    fun add(list: Collection<Danmaku>) {
+    fun add(list: Danmakus) {
         danmakus.addAll(list)
     }
 
@@ -154,7 +111,10 @@ class DanmakuView @JvmOverloads constructor(
      * 暂停
      */
     fun pause() {
-        isPaused = true
+        if (!isPaused) {
+            isPaused = true
+            stopTimeKeeping()
+        }
     }
 
     /**
@@ -163,22 +123,25 @@ class DanmakuView @JvmOverloads constructor(
     fun resume() {
         if (isPaused) {
             isPaused = false
-            launch(Dispatchers.Default) {
-                while (!isDestroyed && !isPaused && isActive) {
-                    val startTime = System.nanoTime()
-                    delay(16)
-                    conductedTimeNs += ((System.nanoTime() - startTime) * speed).toLong()
-                }
-            }
+            startTimeKeeping()
         }
     }
 
     /**
      * 开始
      */
-    fun start(offsetMs: Long = 0) {
+    fun start(config: DanmakuConfig, offsetMs: Long = 0) {
         conductedTimeNs = offsetMs * 1_000_000
+        startDrawingDanmu(config)
         resume()
+    }
+
+    /**
+     * 停止
+     */
+    fun stop() {
+        pause()
+        stopDrawingDanmu()
     }
 
     /**
@@ -187,7 +150,6 @@ class DanmakuView @JvmOverloads constructor(
     fun destroy() {
         isDestroyed = true
         holder.removeCallback(this)
-        clearCache()
         cancel()
     }
 
@@ -197,8 +159,7 @@ class DanmakuView @JvmOverloads constructor(
     }
 
     override fun surfaceCreated(holder: SurfaceHolder) {
-        isRunning = true
-        startDrawDanmu(danmakuConfig ?: return)
+        isSurfaceCreated = true
     }
 
     override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
@@ -208,16 +169,36 @@ class DanmakuView @JvmOverloads constructor(
     }
 
     override fun surfaceDestroyed(holder: SurfaceHolder) {
-        isRunning = false
-        destroy()
+        isSurfaceCreated = false
+    }
+
+    private var timeJob: Job? = null
+    private fun startTimeKeeping() {
+        stopTimeKeeping()
+        timeJob = launch(Dispatchers.Default) {
+            while (!isDestroyed && !isPaused && isActive) {
+                val startTime = System.nanoTime()
+                delay(SPLIT_TIME)
+                conductedTimeNs += ((System.nanoTime() - startTime) * speed).toLong()
+            }
+        }
+    }
+
+    private fun stopTimeKeeping() {
+        timeJob?.cancel()
     }
 
     private var startJob: Job? = null
-
-    fun startDrawDanmu(config: DanmakuConfig) {
-        startJob?.cancel()
+    private fun startDrawingDanmu(config: DanmakuConfig) {
+        stopDrawingDanmu()
         startJob = launch(Dispatchers.Default) {
-            while (isRunning) {
+            while (!isDestroyed && isActive) {
+
+                // 界面不显示
+                if (!isSurfaceCreated) {
+                    delay(200)
+                    continue
+                }
 
                 // 绘制弹幕
                 val startTime = System.currentTimeMillis()
@@ -225,11 +206,11 @@ class DanmakuView @JvmOverloads constructor(
                 val deltaTime = System.currentTimeMillis() - startTime
 
                 // 如果绘制过快，适当延时
-                if (deltaTime < 16) {
-                    delay(20 - deltaTime)
+                if (deltaTime < SPLIT_TIME) {
+                    delay(SPLIT_TIME - deltaTime)
                 }
 
-                while (isPaused && isRunning && !isOnceResume) {
+                while (isPaused && !isOnceResume) {
                     delay(1)
                 }
 
@@ -238,6 +219,10 @@ class DanmakuView @JvmOverloads constructor(
                 }
             }
         }
+    }
+
+    private fun stopDrawingDanmu() {
+        startJob?.cancel()
     }
 
     private fun onDrawDanmakus(config: DanmakuConfig) {
@@ -270,7 +255,7 @@ class DanmakuView @JvmOverloads constructor(
         val conductedTime = conductedTimeMs
 
         val willShowDanmakus = mutableSetOf<ShowingDanmakuInfo>()
-        danmakus.asSequence()
+        ArrayList(danmakus).asSequence()
             // 弹幕显示
             .filter { it.visibility }
             // 弹幕没有被拦截
@@ -306,11 +291,11 @@ class DanmakuView @JvmOverloads constructor(
                     var moved: Boolean
                     do {
                         moved = false
-                        for (info in willShowDanmakus) {
-                            if (line == info.line && danmaku.javaClass == info.danmaku.javaClass) {
+                        for (item in willShowDanmakus) {
+                            if (line == item.line && danmaku.javaClass == item.danmaku.javaClass) {
                                 if (danmaku.willHit(
                                         config,
-                                        info.danmaku as LineDanmaku,
+                                        item.danmaku as LineDanmaku,
                                         drawWidth,
                                         drawHeight
                                     )
@@ -361,10 +346,9 @@ class DanmakuView @JvmOverloads constructor(
     ) {
         if (line == 0) {
             danmaku.onDraw(
-                canvas,
+                canvas, config,
                 drawWidth, drawHeight,
-                progress, config,
-                0
+                progress, 0
             )?.let {
                 willShowDanmakus.add(
                     ShowingDanmakuInfo(
@@ -381,10 +365,9 @@ class DanmakuView @JvmOverloads constructor(
             if (drawLine == 0) drawLine = maxLine
 
             danmaku.onDraw(
-                canvas,
+                canvas, config,
                 drawWidth, drawHeight,
-                progress, config,
-                drawLine
+                progress, drawLine
             )?.let {
                 willShowDanmakus.add(
                     ShowingDanmakuInfo(

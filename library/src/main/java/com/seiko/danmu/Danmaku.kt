@@ -77,10 +77,10 @@ abstract class Danmaku {
      */
     abstract fun onDraw(
         canvas: Canvas,
+        config: DanmakuConfig,
         drawWidth: Int,
         drawHeight: Int,
         progress: Float,
-        config: DanmakuConfig,
         line: Int
     ): RectF?
 

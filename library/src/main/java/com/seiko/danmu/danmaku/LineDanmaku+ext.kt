@@ -23,33 +23,32 @@ internal fun LineDanmaku.checkScrollLineDanmakuHit(
         return true
     }
 
-    if (this.cache == null) this.onBuildCache(config)
-    val otherCache = other.cache ?: return false
+    val otherSize = other.getSize(config)
 
-    val otherSpeed = (drawWidth + otherCache.width).toDouble() /
+
+    val otherSpeed = (drawWidth + otherSize.first).toDouble() /
             (other.duration * config.durationCoefficient)
-    val otherFullShowTime = other.offset + (otherCache.width / otherSpeed).toLong()
+    val otherFullShowTime = other.offset + (otherSize.first / otherSpeed).toLong()
     if (this.offset in other.offset..otherFullShowTime) {
         return true
     }
 
-    if (other.cache == null) other.onBuildCache(config)
-    val thisCache = cache ?: return false
+    val thisSize = this.getSize(config)
 
-    val thisSpeed = (drawWidth + thisCache.width).toDouble() /
+    val thisSpeed = (drawWidth + thisSize.first).toDouble() /
             (this.duration * config.durationCoefficient)
-    val thisFullShowTime = this.offset + (thisCache.width / thisSpeed).toLong()
+    val thisFullShowTime = this.offset + (thisSize.first / thisSpeed).toLong()
     if (other.offset in this.offset..thisFullShowTime) return true
 
     if (thisSpeed == otherSpeed) return false
 
-    val x1 = otherSpeed * (this.offset - other.offset) - otherCache.width
+    val x1 = otherSpeed * (this.offset - other.offset) - otherSize.first
     if (x1 > 0) {
         val t1 = x1 / (thisSpeed - otherSpeed)
         if (t1 in 0.0..(drawWidth / thisSpeed)) return true
     }
 
-    val x2 = thisSpeed * (other.offset - this.offset) - thisCache.width
+    val x2 = thisSpeed * (other.offset - this.offset) - thisSize.first
     if (x2 > 0) {
         val t2 = x2 / (otherSpeed - thisSpeed)
         if (t2 in 0.0..(drawWidth / otherSpeed)) return true
